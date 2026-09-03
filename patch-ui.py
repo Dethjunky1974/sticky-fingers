@@ -126,14 +126,13 @@ JS = r"""
       }
       function setBusy(b) {
         cpBusy = b;
-        var send = $('cp-send'); if (send) send.disabled = b;
         var stop = $('cp-stop'); if (stop) stop.style.display = b ? '' : 'none';
         if (b) setStatus('thinking…', 'busy'); else if (cpWs && cpWs.readyState === 1) setStatus('ready', 'on');
         updateCommentButton();
       }
       function updateCommentButton() {
         var b = $('cp-comment'); if (!b) return;
-        b.disabled = cpBusy || !(cpSelection && cpSelection.nodes && cpSelection.nodes.length);
+        b.disabled = !(cpSelection && cpSelection.nodes && cpSelection.nodes.length);
       }
       function scrollTranscript() {
         var t = $('cp-transcript'); if (t) t.scrollTop = t.scrollHeight;
@@ -294,12 +293,12 @@ JS = r"""
         var input = $('cp-input'); if (!input) return;
         var text = input.value.trim();
         if (!text) { input.focus(); return; }
-        if (cpBusy) return;
+        var queued = cpBusy;
         var payload = { type: 'user', text: text, context: context(), selection: [], attachments: [] };
         var finish = function() {
           if (!send(payload)) return;
           input.value = '';
-          addMsg('user', (kind === 'comment' && payload.selection.length ? '💬 ' : '') + text);
+          addMsg('user', (kind === 'comment' && payload.selection.length ? '💬 ' : '') + text + (queued ? '   (queued)' : ''));
           if (typeof logWithHistory === 'function') logWithHistory('Claude: ' + text.slice(0, 60), 'info');
           setBusy(true);
         };
@@ -326,7 +325,6 @@ JS = r"""
       };
 
       window.claudeCommand = function(name) {
-        if (cpBusy) return;
         var args = name === 'session-start' && cpFileInfo ? cpFileInfo.fileName : '';
         if (!send({ type: 'command', name: name, args: args, context: context() })) return;
         addMsg('user', '/' + (name === 'session-start' ? 'design-session-start ' + args : 'design-session-end'));
