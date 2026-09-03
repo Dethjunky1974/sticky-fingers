@@ -30,9 +30,9 @@ CSS = f"""
     .cp-dot.on {{ background: var(--color-connected); }}
     .cp-dot.busy {{ background: var(--color-waiting); }}
     .cp-dot.err {{ background: var(--color-error); }}
-    .cp-poke {{ margin-left: auto; height: 18px; padding: 0 6px; font-size: 9px; }}
-    .cp-poke + .cp-badge {{ margin-left: 0; }}
-    .cp-badge {{ margin-left: auto; padding: 1px 5px; border: 1px solid var(--figma-color-border, #4a4a4a); border-radius: 3px; font-family: 'SF Mono', 'Menlo', Consolas, monospace; font-size: 9px; white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }}
+    .cp-right {{ margin-left: auto; display: flex; align-items: center; gap: 6px; }}
+    .cp-poke {{ height: 18px; padding: 0 6px; font-size: 9px; }}
+    .cp-badge {{ padding: 1px 5px; border: 1px solid var(--figma-color-border, #4a4a4a); border-radius: 3px; font-family: 'SF Mono', 'Menlo', Consolas, monospace; font-size: 9px; white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }}
     .cp-badge.edit {{ color: var(--color-error); border-color: var(--color-error); }}
     .cp-badge.critique {{ color: var(--log-info); border-color: var(--log-info); }}
     .cp-transcript {{ max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 6px; border: 1px solid var(--figma-color-border, #4a4a4a); border-radius: 3px; background: var(--figma-color-bg, #2c2c2c); font-size: 11px; line-height: 1.45; user-select: text; }}
@@ -80,8 +80,10 @@ PANE = """
         <span class="cp-dot" id="cp-dot" aria-hidden="true"></span>
         <span class="cp-title">Claude</span>
         <span id="cp-status">offline</span>
-        <button class="cp-btn cp-poke" id="cp-poke" onclick="claudePoke()" title="What is Claude doing right now? Answered by the relay, no model call" style="display:none">Poke</button>
-        <span class="cp-badge" id="cp-scope" title="Scope guard state from ~/CLAUDE/figma-scope.json">no scope</span>
+        <span class="cp-right">
+          <button class="cp-btn cp-poke" id="cp-poke" onclick="claudePoke()" title="What is Claude doing right now? Answered by the relay, no model call">Poke</button>
+          <span class="cp-badge" id="cp-scope" title="Scope guard state from ~/CLAUDE/figma-scope.json">no scope</span>
+        </span>
       </div>
       <div class="cp-transcript" id="cp-transcript" aria-live="polite"></div>
       <div class="cp-sel" id="cp-sel">Select something on the canvas</div>
@@ -138,7 +140,6 @@ JS = r"""
       function setBusy(b) {
         cpBusy = b;
         var stop = $('cp-stop'); if (stop) stop.style.display = b ? '' : 'none';
-        var poke = $('cp-poke'); if (poke) poke.style.display = b ? '' : 'none';
         if (b) setStatus('thinking…', 'busy'); else if (cpWs && cpWs.readyState === 1) setStatus('ready', 'on');
         updateCommentButton();
       }
