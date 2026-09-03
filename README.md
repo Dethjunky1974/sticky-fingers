@@ -1,4 +1,4 @@
-# Sticky Fingers
+# STICKY FINGERS
 
 The Figma Desktop Bridge plugin, renamed and extended with a Claude pane.
 

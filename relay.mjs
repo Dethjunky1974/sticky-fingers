@@ -17,7 +17,9 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 
 const PORT = Number(process.env.CLAUDE_PANE_PORT || 9240);
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
-const CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), 'CLAUDE');
+// Config dir: explicit env wins; otherwise ~/CLAUDE if it exists (Quince's layout), else the default ~/.claude.
+const CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR
+  || (fs.existsSync(path.join(os.homedir(), 'CLAUDE', 'settings.json')) ? path.join(os.homedir(), 'CLAUDE') : path.join(os.homedir(), '.claude'));
 const MODEL = process.env.CLAUDE_PANE_MODEL || 'claude-fable-5-1';
 const CWD = process.env.CLAUDE_PANE_CWD || os.homedir();
 const SESSIONS_FILE = path.join(ROOT, 'sessions.json');

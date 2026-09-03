@@ -2,3 +2,4 @@ node_modules/
 attachments/*.png
 relay.log
 sessions.json
+dist/

@@ -280,7 +280,7 @@ JS = r"""
       function onDown() {
         cpWs = null;
         if (!paneVisible()) { setStatus('offline', ''); return; }
-        if (cpRetries >= CP_MAX_RETRIES) { setStatus('relay not running — start it: node ~/CLAUDE/figma-claude-pane/relay.mjs', 'err'); return; }
+        if (cpRetries >= CP_MAX_RETRIES) { setStatus('relay not running — start it (see INSTALL.md)', 'err'); return; }
         cpRetries++;
         setStatus('reconnecting… (' + cpRetries + '/' + CP_MAX_RETRIES + ')', 'err');
         clearTimeout(cpRetryTimer);
@@ -456,7 +456,7 @@ src = src.replace(anchor_f2, anchor_f2 + "          if (window.__claudePanePage)
 
 # F2. plugin name in the copied session log
 once(src, 'Figma Desktop Bridge - Session Log', 'session log title')
-src = src.replace('Figma Desktop Bridge - Session Log', 'Sticky Fingers - Session Log')
+src = src.replace('Figma Desktop Bridge - Session Log', 'STICKY FINGERS - Session Log')
 
 # G. JS before </script>
 once(src, '  </script>', 'script end'); src = src.replace('  </script>', JS + '  </script>')
@@ -476,7 +476,9 @@ else:
     once(ms, tail, 'manifest reasoning')
     ms = ms.replace(tail, f'for remote write access. Port {PORT} is the local Claude pane relay (~/CLAUDE/figma-claude-pane).",')
     once(ms, '"name": "Figma Desktop Bridge"', 'manifest name')
-    ms = ms.replace('"name": "Figma Desktop Bridge"', '"name": "Sticky Fingers"')
+    ms = ms.replace('"name": "Figma Desktop Bridge"', '"name": "STICKY FINGERS"')
+    once(ms, '"id": "figma-desktop-bridge-mcp"', 'manifest id')
+    ms = ms.replace('"id": "figma-desktop-bridge-mcp"', '"id": "STICKY-FINGERS"')
     json.loads(ms)
     MANIFEST.write_text(ms)
     print('manifest.json patched (text-level)')
