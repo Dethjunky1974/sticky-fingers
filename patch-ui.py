@@ -246,7 +246,7 @@ JS = r"""
             case 'replay_start': { var tr = $('cp-transcript'); if (tr) tr.innerHTML = ''; cpBubble = null; break; }
             case 'replay_end': cpBubble = null; setBusy(!!msg.busy); scrollTranscript(); break;
             case 'user_echo': cpBubble = null; addMsg('user', msg.text); break;
-            case 'status': setStatus(msg.text, cpBusy ? 'busy' : 'on'); break;
+            case 'status': if (cpBusy) setStatus('thinking…', 'busy'); else setStatus(msg.text, 'on'); break;
             case 'scope': renderScope(msg); break;
             case 'session': break;
             case 'busy': setBusy(true); break;
