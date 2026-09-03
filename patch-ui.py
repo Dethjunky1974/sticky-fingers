@@ -50,6 +50,11 @@ CSS = f"""
     .cp-btn:hover {{ border-color: var(--figma-color-text-secondary, rgba(255,255,255,0.55)); }}
     .cp-btn.primary {{ background: var(--figma-color-bg-brand, #0d99ff); border-color: transparent; color: #fff; }}
     .cp-btn.danger {{ color: var(--color-error); border-color: var(--color-error); }}
+    .cp-btn.active {{ background: var(--figma-color-bg-brand, #0d99ff); border-color: transparent; color: #fff; }}
+    .cp-attach {{ display: none; gap: 6px; align-items: center; font-size: 10px; color: var(--figma-color-text-secondary, rgba(255,255,255,0.55)); }}
+    .cp-attach.visible {{ display: flex; }}
+    .cp-attach .cp-btn {{ height: 18px; padding: 0 6px; font-size: 9px; }}
+    .claude-pane.cp-dragover .cp-input {{ border-color: var(--figma-color-bg-brand, #0d99ff); }}
     .cp-btn:disabled {{ opacity: .45; cursor: default; }}
     .cp-foot {{ display: flex; gap: 6px; align-items: center; justify-content: space-between; font-size: 9px; color: var(--figma-color-text-secondary, rgba(255,255,255,0.55)); }}
     .cp-foot .cp-actions {{ display: flex; gap: 4px; }}
@@ -76,6 +81,7 @@ PANE = """
       </div>
       <div class="cp-transcript" id="cp-transcript" aria-live="polite"></div>
       <div class="cp-sel" id="cp-sel">Select something on the canvas</div>
+      <div class="cp-attach" id="cp-attach"><span id="cp-attach-text"></span><button class="cp-btn" onclick="claudeClearAttachments()" title="Drop the pasted screenshots">Clear</button></div>
       <div class="cp-perm" id="cp-perm" role="alertdialog" aria-labelledby="cp-perm-title">
         <div id="cp-perm-title"><strong>Allow</strong> <span id="cp-perm-tool"></span>?</div>
         <pre id="cp-perm-input"></pre>
@@ -85,7 +91,7 @@ PANE = """
         </div>
       </div>
       <div class="cp-row">
-        <textarea class="cp-input" id="cp-input" rows="2" placeholder="Message Claude… (Enter to send, Shift+Enter for a new line)" aria-label="Message Claude"></textarea>
+        <textarea class="cp-input" id="cp-input" rows="2" placeholder="Message Claude… (Enter to send, Shift+Enter for a new line, paste or drop a screenshot)" aria-label="Message Claude"></textarea>
         <button class="cp-btn primary" id="cp-send" onclick="claudeSend('message')" title="Send">Send</button>
       </div>
       <div class="cp-foot">
@@ -94,7 +100,7 @@ PANE = """
           <button class="cp-btn" id="cp-stop" onclick="claudeInterrupt()" title="Interrupt the current turn" style="display:none">Stop</button>
         </div>
         <div class="cp-actions">
-          <button class="cp-btn" onclick="claudeCommand('session-start')" title="Run /design-session-start for this file">Session start</button>
+          <button class="cp-btn" onclick="claudeCommand('session-start')" title="Re-run /design-session-start for this file (it runs by itself when the pane connects)">Session start</button>
           <button class="cp-btn" onclick="claudeCommand('session-end')" title="Run /design-session-end">Session end</button>
         </div>
       </div>
@@ -116,6 +122,7 @@ JS = r"""
       var cpPending = null;          // current permission request {id, toolName, input}
       var cpBubble = null;           // assistant bubble receiving deltas
       var cpBusy = false;
+      var cpAttachments = [];        // pasted or dropped screenshots {nodeId, base64, format}
 
       function $(id) { return document.getElementById(id); }
       function paneVisible() { var p = $('claude-pane'); return !!(p && p.classList.contains('visible')); }
@@ -132,7 +139,9 @@ JS = r"""
       }
       function updateCommentButton() {
         var b = $('cp-comment'); if (!b) return;
-        b.disabled = !(cpSelection && cpSelection.nodes && cpSelection.nodes.length);
+        var has = !!(cpSelection && cpSelection.nodes && cpSelection.nodes.length);
+        b.disabled = !has;
+        b.classList.toggle('active', has); // blue while a selection exists
       }
       function scrollTranscript() {
         var t = $('cp-transcript'); if (t) t.scrollTop = t.scrollHeight;
@@ -171,6 +180,29 @@ JS = r"""
         }
         updateCommentButton();
       }
+      function renderAttachments() {
+        var box = $('cp-attach'), t = $('cp-attach-text'); if (!box || !t) return;
+        if (!cpAttachments.length) { box.classList.remove('visible'); autoResize(); return; }
+        t.textContent = '📎 ' + cpAttachments.length + ' screenshot' + (cpAttachments.length > 1 ? 's' : '') + ' attached';
+        box.classList.add('visible');
+        autoResize();
+      }
+      // Files pasted or dropped into the pane. Only images are taken.
+      function addFiles(files) {
+        var list = Array.prototype.slice.call(files || []).filter(function(f) { return f && f.type && f.type.indexOf('image/') === 0; });
+        if (!list.length) return false;
+        list.forEach(function(f) {
+          var r = new FileReader();
+          r.onload = function() {
+            var s = String(r.result || ''); var i = s.indexOf(',');
+            cpAttachments.push({ nodeId: 'paste-' + (cpAttachments.length + 1), base64: s.slice(i + 1), format: f.type === 'image/jpeg' ? 'JPG' : 'PNG' });
+            renderAttachments();
+          };
+          r.readAsDataURL(f);
+        });
+        return true;
+      }
+      window.claudeClearAttachments = function() { cpAttachments = []; renderAttachments(); };
       function renderScope(s) {
         var b = $('cp-scope'); if (!b) return;
         if (!s || !s.mode) { b.textContent = 'no scope'; b.className = 'cp-badge'; b.title = 'No ~/CLAUDE/figma-scope.json'; return; }
@@ -209,8 +241,11 @@ JS = r"""
           switch (msg.type) {
             case 'hello_ack':
               setStatus(msg.resumed ? 'session resumed' : 'new session', 'on');
-              if (msg.busy) setBusy(true);
+              setBusy(!!msg.busy);
               break;
+            case 'replay_start': { var tr = $('cp-transcript'); if (tr) tr.innerHTML = ''; cpBubble = null; break; }
+            case 'replay_end': cpBubble = null; setBusy(!!msg.busy); scrollTranscript(); break;
+            case 'user_echo': cpBubble = null; addMsg('user', msg.text); break;
             case 'status': setStatus(msg.text, cpBusy ? 'busy' : 'on'); break;
             case 'scope': renderScope(msg); break;
             case 'session': break;
@@ -234,6 +269,7 @@ JS = r"""
               scrollTranscript();
               break;
             case 'permission': showPermission(msg); break;
+            case 'command_echo': addMsg('user', msg.text); setBusy(true); break; // relay fired a command itself
             case 'permission_closed': if (cpPending && cpPending.id === msg.id) hidePermission(); break;
             case 'error': addMsg('error', msg.text); setBusy(false); break;
           }
@@ -294,11 +330,13 @@ JS = r"""
         var text = input.value.trim();
         if (!text) { input.focus(); return; }
         var queued = cpBusy;
-        var payload = { type: 'user', text: text, context: context(), selection: [], attachments: [] };
+        var payload = { type: 'user', text: text, context: context(), selection: [], attachments: cpAttachments.slice() };
+        var pasted = cpAttachments.length;
         var finish = function() {
           if (!send(payload)) return;
           input.value = '';
-          addMsg('user', (kind === 'comment' && payload.selection.length ? '💬 ' : '') + text + (queued ? '   (queued)' : ''));
+          cpAttachments = []; renderAttachments();
+          if (queued) addMsg('user', text + '   (queued)'); // otherwise the relay echoes it back
           if (typeof logWithHistory === 'function') logWithHistory('Claude: ' + text.slice(0, 60), 'info');
           setBusy(true);
         };
@@ -327,7 +365,6 @@ JS = r"""
       window.claudeCommand = function(name) {
         var args = name === 'session-start' && cpFileInfo ? cpFileInfo.fileName : '';
         if (!send({ type: 'command', name: name, args: args, context: context() })) return;
-        addMsg('user', '/' + (name === 'session-start' ? 'design-session-start ' + args : 'design-session-end'));
         setBusy(true);
       };
 
@@ -337,12 +374,32 @@ JS = r"""
       window.__claudePaneSelection = function(data) { cpSelection = data || null; if (data && data.page) cpPage = data.page; renderSelection(); };
       window.__claudePanePage = function(data) { if (data && (data.name || data.page)) cpPage = data.name || data.page; };
 
+      // Open with the [+] toolbar and this pane expanded. Registered after the bridge's
+      // own load handler, so it runs after the bridge has laid itself out.
+      window.addEventListener('load', function() {
+        setTimeout(function() {
+          var sub = $('sub-toolbar');
+          if (sub && !sub.classList.contains('visible')) toggleSubToolbar();
+          if (!paneVisible()) window.toggleClaude();
+        }, 0);
+      });
+
       // Enter sends, Shift+Enter inserts a newline.
       document.addEventListener('DOMContentLoaded', function() {
         var i = $('cp-input'); if (!i) return;
         i.addEventListener('keydown', function(e) {
           if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); window.claudeSend('message'); }
         });
+        // Paste a screenshot from the clipboard into the field.
+        i.addEventListener('paste', function(e) {
+          var files = e.clipboardData && e.clipboardData.files;
+          if (files && files.length && addFiles(files)) e.preventDefault();
+        });
+        // Drop an image file anywhere on the pane.
+        var pane = $('claude-pane'); if (!pane) return;
+        ['dragenter', 'dragover'].forEach(function(ev) { pane.addEventListener(ev, function(e) { e.preventDefault(); pane.classList.add('cp-dragover'); }); });
+        pane.addEventListener('dragleave', function() { pane.classList.remove('cp-dragover'); });
+        pane.addEventListener('drop', function(e) { e.preventDefault(); pane.classList.remove('cp-dragover'); if (e.dataTransfer) addFiles(e.dataTransfer.files); });
       });
     })();
     // ============================================================================

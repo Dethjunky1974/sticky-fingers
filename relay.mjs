@@ -86,18 +86,32 @@ class Session {
     this.sessionId = readSessions()[fileKey] || null;
     this.resumed = !!this.sessionId;
     this.busy = false;
+    this.history = []; // transcript events replayed to a pane that (re)connects
     this.start();
   }
 
   send(obj) {
+    this.remember(obj);
     const data = JSON.stringify(obj);
     for (const ws of this.sockets) if (ws.readyState === 1) ws.send(data);
+  }
+
+  remember(obj) {
+    if (!['delta', 'tool', 'result', 'error', 'user_echo', 'command_echo'].includes(obj.type)) return;
+    const last = this.history[this.history.length - 1];
+    if (obj.type === 'delta' && last && last.type === 'delta') last.text += obj.text; // coalesce
+    else this.history.push({ ...obj });
+    if (this.history.length > 600) this.history.splice(0, this.history.length - 600);
   }
 
   attach(ws) {
     this.sockets.add(ws);
     ws.send(JSON.stringify({ type: 'hello_ack', sessionId: this.sessionId, resumed: this.resumed, model: MODEL, busy: this.busy }));
     ws.send(JSON.stringify(readScope()));
+    // Replay the transcript so nothing said while the pane was closed is lost.
+    ws.send(JSON.stringify({ type: 'replay_start', count: this.history.length }));
+    for (const ev of this.history) ws.send(JSON.stringify(ev));
+    ws.send(JSON.stringify({ type: 'replay_end', busy: this.busy }));
     // Re-arm any permission prompt the pane may have missed while disconnected.
     for (const [id, p] of this.pending) ws.send(JSON.stringify(p.request));
   }
@@ -111,10 +125,11 @@ class Session {
       env: { ...process.env, CLAUDE_CONFIG_DIR: CONFIG_DIR },
       settingSources: ['user', 'project'],
       includePartialMessages: true,
-      // Bypass: the pane never prompts. Figma writes stay gated by the
-      // figma-scope-guard PreToolUse hook, which runs regardless of permission mode.
-      permissionMode: 'bypassPermissions',
-      allowDangerouslySkipPermissions: true,
+      // 'default' so every tool that would prompt is routed through canUseTool below,
+      // which auto-allows and enforces the scope guard itself. Not 'bypassPermissions':
+      // under bypass neither canUseTool nor the settings-file PreToolUse guard blocked a
+      // Figma write in critique mode (probe 2026-09-03).
+      permissionMode: 'default',
       canUseTool: (toolName, input, opts) => this.canUseTool(toolName, input, opts),
       stderr: d => log('cli', d.trim()),
       ...(this.sessionId ? { resume: this.sessionId } : {}),
@@ -157,6 +172,7 @@ class Session {
         }
         case 'result': {
           this.busy = false;
+          log('info', 'result', { fileKey: this.fileKey, turns: msg.num_turns, cost: msg.total_cost_usd, chars: (msg.result || '').length, subtype: msg.subtype });
           if (msg.session_id && msg.session_id !== this.sessionId) this.setSessionId(msg.session_id);
           this.send({
             type: 'result',
@@ -184,26 +200,27 @@ class Session {
     this.send({ type: 'session', sessionId: id });
   }
 
-  canUseTool(toolName, input, { signal }) {
-    const id = randomUUID();
-    const request = { type: 'permission', id, toolName, input, summary: summariseInput(toolName, input) };
-    log('info', 'permission requested', { toolName, id });
-    return new Promise(resolve => {
-      const finish = result => {
-        const p = this.pending.get(id);
-        if (!p) return;
-        clearTimeout(p.timer);
-        this.pending.delete(id);
-        this.send({ type: 'permission_closed', id });
-        resolve(result);
-      };
-      const timer = setTimeout(() => finish({ behavior: 'deny', message: 'No answer from the Figma pane within 5 minutes.' }), PERMISSION_TIMEOUT_MS);
-      this.pending.set(id, { request, timer, finish });
-      if (signal) signal.addEventListener('abort', () => finish({ behavior: 'deny', message: 'Aborted.' }), { once: true });
-      this.send(request);
-    });
+  // Auto-allow everything; deny Figma writes while ~/CLAUDE/figma-scope.json is in
+  // critique mode. Mirrors hooks/figma-scope-guard.py so the pane has the same gate
+  // even if the settings-file hook does not load in the SDK session.
+  canUseTool(toolName, input) {
+    if (isFigmaWrite(toolName)) {
+      const scope = readScope();
+      if (scope.mode === 'critique') {
+        const target = scope.target.length ? ` (scope target: ${scope.target.join(', ')})` : '';
+        log('info', 'blocked by scope guard', { toolName });
+        this.send({ type: 'status', text: `blocked · ${toolName.split('__').pop()} · critique mode` });
+        return Promise.resolve({
+          behavior: 'deny',
+          message: `BLOCKED by scope guard: figma-scope.json is in CRITIQUE (read-only) mode${target}. ` +
+                   'A critique never edits. Rewrite ~/CLAUDE/figma-scope.json to {"mode":"edit",...} on a named instruction first.',
+        });
+      }
+    }
+    return Promise.resolve({ behavior: 'allow', updatedInput: input });
   }
 
+  // Kept for the pane's Allow/Deny card; unused while canUseTool auto-allows.
   answerPermission(id, allow) {
     const p = this.pending.get(id);
     if (!p) return;
@@ -236,6 +253,7 @@ class Session {
     if (saved.length) header.push('Read each screenshot path with the Read tool before answering.');
     const prompt = (header.length ? header.join('\n') + '\n\n' : '') + text;
 
+    this.remember({ type: 'user_echo', text });
     this.busy = true;
     this.send({ type: 'busy' });
     this.inbox.push({ type: 'user', message: { role: 'user', content: prompt }, parent_tool_use_id: null });
@@ -245,6 +263,16 @@ class Session {
   async interrupt() {
     try { await this.q.interrupt(); } catch (err) { log('warn', 'interrupt failed', { err: String(err) }); }
   }
+}
+
+// Same marker list as hooks/figma-scope-guard.py. figma_execute is deliberately absent
+// there too (dual-use); it stays behavioural.
+const MUTATE_MARKERS = ['set_', 'create_', 'delete_', 'move_', 'resize_', 'rename_', 'clone_',
+  'update_', 'add_', 'batch_', 'instantiate', 'import_', 'setup_'];
+function isFigmaWrite(toolName) {
+  if (!toolName.startsWith('mcp__figma-console__')) return false;
+  const leaf = toolName.split('__').pop();
+  return MUTATE_MARKERS.some(m => leaf.includes(m));
 }
 
 function summariseInput(toolName, input) {

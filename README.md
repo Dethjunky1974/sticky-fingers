@@ -28,6 +28,10 @@ The patched plugin lives in the MCP checkout on branch `claude-pane`:
 cd ~/CLAUDE/figma-claude-pane && node relay.mjs
 ```
 
+After editing `relay.mjs`, `./restart.sh` swaps the process without a terminal: it launches
+the new relay detached and kills the old one; the pane reconnects and fires the session
+start. Works from inside a pane session (the running turn ends when the old relay dies).
+
 Then in Figma: run the Desktop Bridge plugin, press `[+]`, press **Claude**.
 
 Environment overrides: `CLAUDE_PANE_PORT` (9240), `CLAUDE_PANE_MODEL` (`claude-fable-5-1`),
@@ -36,16 +40,25 @@ Environment overrides: `CLAUDE_PANE_PORT` (9240), `CLAUDE_PANE_MODEL` (`claude-f
 
 ## What the pane does
 
-- **Send**: your text plus file name, key, and current page.
+- Opens expanded: on plugin launch the `[+]` toolbar and the pane are open and connected.
+- **Send**: your text plus file name, key, and current page. Paste a screenshot into the
+  field (Cmd+V) or drop an image file on the pane; it is saved under `attachments/` and
+  handed to Claude as `[Screenshot] <path>`. A chip shows the count until you send or clear.
 - **Comment on selection**: same, plus the selected layers (name, type, id, size) and a
   screenshot of each (first three), saved under `attachments/` and read by Claude.
   Figma's selection is the pointer. A plugin cannot draw a crosshair on the canvas.
-- **Allow / Deny**: not shown since 2026-09-03. The relay runs with
-  `permissionMode: 'bypassPermissions'`, so tool calls never prompt. Figma writes are still
-  gated by the `figma-scope-guard` PreToolUse hook. The card code stays in place; set the
-  mode back to `'default'` in `relay.mjs` to get prompts again.
+- **Allow / Deny**: not shown since 2026-09-03. `canUseTool` in `relay.mjs` auto-allows
+  every tool call, and denies figma-console write tools while `~/CLAUDE/figma-scope.json`
+  is in `critique` mode (same marker list as `hooks/figma-scope-guard.py`). Probe result
+  that drove this: under `permissionMode: 'bypassPermissions'` the settings-file hook did not
+  block a write in critique mode, so the gate lives in the relay. The card code stays in
+  place for a future opt-in.
 - **Scope badge**: mirrors `~/CLAUDE/figma-scope.json` (critique or edit, target nodes).
-- **Session start / end**: sends `/design-session-start <file name>` or `/design-session-end`.
+- **Comment on selection** turns blue while something is selected on the canvas.
+- **Session start**: fires by itself when the pane connects, as
+  `/design-session-start <file name> <file key>`, once per relay process per file. The
+  command resolves the project from the key. The button is the manual re-run.
+- **Session end**: sends `/design-session-end`.
 
 ## After an upstream update of figma-console-mcp
 
