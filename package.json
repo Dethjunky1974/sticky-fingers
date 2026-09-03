@@ -1,0 +1,12 @@
+{
+  "name": "figma-claude-pane",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Relay between the Figma Desktop Bridge Claude pane and a headless Claude Code session (Agent SDK).",
+  "scripts": { "start": "node relay.mjs" },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.259",
+    "ws": "^8.18.0"
+  }
+}
