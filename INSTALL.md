@@ -74,6 +74,8 @@ expanded. Status should read "new session" on the first run and "session resumed
 - **Paste or drop** a screenshot into the field to attach it to your next message.
 - **Session start / Session end** run `/design-session-start` and `/design-session-end` if
   you have those skills; otherwise Claude will say it doesn't know them. Ignore the buttons.
+- **Poke** appears while Claude is busy. It asks the relay, not Claude, what is happening:
+  time in the turn, tool calls so far, last tool. Instant and free.
 - **Stop** interrupts the current turn.
 
 One Claude session per Figma file, kept in `relay/sessions.json`. Delete an entry there to

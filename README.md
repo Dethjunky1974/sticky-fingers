@@ -57,6 +57,7 @@ Environment overrides: `CLAUDE_PANE_PORT` (9240), `CLAUDE_PANE_MODEL` (`claude-f
   that drove this: under `permissionMode: 'bypassPermissions'` the settings-file hook did not
   block a write in critique mode, so the gate lives in the relay. The card code stays in
   place for a future opt-in.
+- **Poke**: while busy, reports the turn's progress from the relay (elapsed, tool count, last tool).
 - **Scope badge**: mirrors `~/CLAUDE/figma-scope.json` (critique or edit, target nodes).
 - **Comment on selection** turns blue while something is selected on the canvas.
 - **Session start**: fires by itself when the pane connects, as
