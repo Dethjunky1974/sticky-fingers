@@ -1,4 +1,6 @@
-# Claude pane for the Figma Desktop Bridge
+# Sticky Fingers
+
+The Figma Desktop Bridge plugin, renamed and extended with a Claude pane.
 
 Talk to a Claude Code session from inside Figma. The bridge plugin panel gets a **Claude**
 button under `[+]`. The pane talks to a local relay, and the relay drives a headless Claude

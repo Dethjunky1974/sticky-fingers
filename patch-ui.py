@@ -454,6 +454,10 @@ anchor_f2 = "          if (window.__wsForwardPageChange) window.__wsForwardPageC
 once(src, anchor_f2, 'PAGE_CHANGE')
 src = src.replace(anchor_f2, anchor_f2 + "          if (window.__claudePanePage) window.__claudePanePage(msg.data); // claude-pane\n")
 
+# F2. plugin name in the copied session log
+once(src, 'Figma Desktop Bridge - Session Log', 'session log title')
+src = src.replace('Figma Desktop Bridge - Session Log', 'Sticky Fingers - Session Log')
+
 # G. JS before </script>
 once(src, '  </script>', 'script end'); src = src.replace('  </script>', JS + '  </script>')
 
@@ -471,6 +475,8 @@ else:
     tail = 'for remote write access.",'
     once(ms, tail, 'manifest reasoning')
     ms = ms.replace(tail, f'for remote write access. Port {PORT} is the local Claude pane relay (~/CLAUDE/figma-claude-pane).",')
+    once(ms, '"name": "Figma Desktop Bridge"', 'manifest name')
+    ms = ms.replace('"name": "Figma Desktop Bridge"', '"name": "Sticky Fingers"')
     json.loads(ms)
     MANIFEST.write_text(ms)
     print('manifest.json patched (text-level)')
