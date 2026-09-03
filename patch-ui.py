@@ -30,6 +30,8 @@ CSS = f"""
     .cp-dot.on {{ background: var(--color-connected); }}
     .cp-dot.busy {{ background: var(--color-waiting); }}
     .cp-dot.err {{ background: var(--color-error); }}
+    .cp-poke {{ margin-left: auto; height: 18px; padding: 0 6px; font-size: 9px; }}
+    .cp-poke + .cp-badge {{ margin-left: 0; }}
     .cp-badge {{ margin-left: auto; padding: 1px 5px; border: 1px solid var(--figma-color-border, #4a4a4a); border-radius: 3px; font-family: 'SF Mono', 'Menlo', Consolas, monospace; font-size: 9px; white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }}
     .cp-badge.edit {{ color: var(--color-error); border-color: var(--color-error); }}
     .cp-badge.critique {{ color: var(--log-info); border-color: var(--log-info); }}
@@ -55,6 +57,7 @@ CSS = f"""
     .cp-attach.visible {{ display: flex; }}
     .cp-attach .cp-btn {{ height: 18px; padding: 0 6px; font-size: 9px; }}
     .claude-pane.cp-dragover .cp-input {{ border-color: var(--figma-color-bg-brand, #0d99ff); }}
+    .wrap.top-collapsed .status-meta {{ display: none !important; }} /* [−] folds the meta line too */
     .cp-btn:disabled {{ opacity: .45; cursor: default; }}
     .cp-foot {{ display: flex; gap: 6px; align-items: center; justify-content: space-between; font-size: 9px; color: var(--figma-color-text-secondary, rgba(255,255,255,0.55)); }}
     .cp-foot .cp-actions {{ display: flex; gap: 4px; }}
@@ -77,6 +80,7 @@ PANE = """
         <span class="cp-dot" id="cp-dot" aria-hidden="true"></span>
         <span class="cp-title">Claude</span>
         <span id="cp-status">offline</span>
+        <button class="cp-btn cp-poke" id="cp-poke" onclick="claudePoke()" title="What is Claude doing right now? Answered by the relay, no model call" style="display:none">Poke</button>
         <span class="cp-badge" id="cp-scope" title="Scope guard state from ~/CLAUDE/figma-scope.json">no scope</span>
       </div>
       <div class="cp-transcript" id="cp-transcript" aria-live="polite"></div>
@@ -134,6 +138,7 @@ JS = r"""
       function setBusy(b) {
         cpBusy = b;
         var stop = $('cp-stop'); if (stop) stop.style.display = b ? '' : 'none';
+        var poke = $('cp-poke'); if (poke) poke.style.display = b ? '' : 'none';
         if (b) setStatus('thinking…', 'busy'); else if (cpWs && cpWs.readyState === 1) setStatus('ready', 'on');
         updateCommentButton();
       }
@@ -268,6 +273,12 @@ JS = r"""
               setBusy(false);
               scrollTranscript();
               break;
+            case 'poke_reply': {
+              setStatus(msg.text, cpBusy ? 'busy' : 'on');
+              clearTimeout(window.__cpPokeTimer);
+              window.__cpPokeTimer = setTimeout(function() { if (cpBusy) setStatus('thinking…', 'busy'); }, 8000);
+              break;
+            }
             case 'permission': showPermission(msg); break;
             case 'command_echo': addMsg('user', msg.text); setBusy(true); break; // relay fired a command itself
             case 'permission_closed': if (cpPending && cpPending.id === msg.id) hidePermission(); break;
@@ -369,6 +380,7 @@ JS = r"""
       };
 
       window.claudeInterrupt = function() { send({ type: 'interrupt' }); };
+      window.claudePoke = function() { send({ type: 'poke' }); };
 
       // Fed from window.onmessage (SELECTION_CHANGE / PAGE_CHANGE cases).
       window.__claudePaneSelection = function(data) { cpSelection = data || null; if (data && data.page) cpPage = data.page; renderSelection(); };
@@ -378,9 +390,10 @@ JS = r"""
       // own load handler, so it runs after the bridge has laid itself out.
       window.addEventListener('load', function() {
         setTimeout(function() {
-          var sub = $('sub-toolbar');
-          if (sub && !sub.classList.contains('visible')) toggleSubToolbar();
           if (!paneVisible()) window.toggleClaude();
+          var sub = $('sub-toolbar'); // top block folded: header is the one status line
+          if (sub && sub.classList.contains('visible')) toggleSubToolbar();
+          else document.querySelector('.wrap').classList.add('top-collapsed');
         }, 0);
       });
 
@@ -444,7 +457,10 @@ src = src.replace("pluginMessage: { type: 'RESIZE_UI', width: PLUGIN_WIDTH, heig
 # E. [+] closing collapses the pane too
 anchor_e = "        if (log.classList.contains('visible')) toggleLog();\n"
 once(src, anchor_e, 'toggleSubToolbar collapse')
-src = src.replace(anchor_e, anchor_e + "        var cpane = document.getElementById('claude-pane'); // claude-pane\n        if (cpane && cpane.classList.contains('visible')) toggleClaude();\n")
+src = src.replace(anchor_e, anchor_e + "        // claude-pane: the pane stays; [−] folds only the toolbar + meta line\n")
+anchor_e2 = "      document.getElementById('expand-btn').textContent = nowOpen ? '−' : '+';\n"
+once(src, anchor_e2, 'toggleSubToolbar expand-btn label')
+src = src.replace(anchor_e2, anchor_e2 + "      document.querySelector('.wrap').classList.toggle('top-collapsed', !nowOpen); // claude-pane accordion\n")
 
 # F. selection + page pushes feed the pane
 anchor_f = "          if (window.__wsForwardSelectionChange) window.__wsForwardSelectionChange(msg.data);\n"

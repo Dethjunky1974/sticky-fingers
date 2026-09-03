@@ -42,7 +42,9 @@ Environment overrides: `CLAUDE_PANE_PORT` (9240), `CLAUDE_PANE_MODEL` (`claude-f
 
 ## What the pane does
 
-- Opens expanded: on plugin launch the `[+]` toolbar and the pane are open and connected.
+- Opens expanded: on plugin launch the pane is open and connected, and the top block is
+  folded to one line. `[+]` unfolds the toolbar (Activity, Claude) and the connection meta
+  line; `[−]` folds them again without closing the pane.
 - **Send**: your text plus file name, key, and current page. Paste a screenshot into the
   field (Cmd+V) or drop an image file on the pane; it is saved under `attachments/` and
   handed to Claude as `[Screenshot] <path>`. A chip shows the count until you send or clear.

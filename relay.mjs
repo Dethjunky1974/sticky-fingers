@@ -89,6 +89,7 @@ class Session {
     this.resumed = !!this.sessionId;
     this.busy = false;
     this.history = []; // transcript events replayed to a pane that (re)connects
+    this.turn = { startedAt: null, initSeen: false, toolCount: 0, last: null }; // what a poke reports
     this.start();
   }
 
@@ -152,6 +153,7 @@ class Session {
       switch (msg.type) {
         case 'system':
           if (msg.subtype === 'init') {
+            this.turn.initSeen = true;
             if (msg.session_id && msg.session_id !== this.sessionId) this.setSessionId(msg.session_id);
             this.send({ type: 'status', text: `ready · ${msg.model}` });
           }
@@ -168,7 +170,10 @@ class Session {
           if (msg.parent_tool_use_id) break;
           const blocks = (msg.message && Array.isArray(msg.message.content)) ? msg.message.content : [];
           for (const b of blocks) {
-            if (b.type === 'tool_use') this.send({ type: 'tool', name: b.name, summary: summariseInput(b.name, b.input) });
+            if (b.type === 'tool_use') {
+              this.turn.toolCount++; this.turn.last = { name: b.name, at: Date.now() };
+              this.send({ type: 'tool', name: b.name, summary: summariseInput(b.name, b.input) });
+            }
           }
           break;
         }
@@ -256,10 +261,26 @@ class Session {
     const prompt = (header.length ? header.join('\n') + '\n\n' : '') + text;
 
     this.remember({ type: 'user_echo', text });
+    if (!this.busy) this.turn = { startedAt: Date.now(), initSeen: this.turn.initSeen, toolCount: 0, last: null };
     this.busy = true;
     this.send({ type: 'busy' });
     this.inbox.push({ type: 'user', message: { role: 'user', content: prompt }, parent_tool_use_id: null });
     log('info', 'user message queued', { chars: prompt.length, attachments: saved.length });
+  }
+
+  poke() {
+    const now = Date.now();
+    const ago = ms => ms < 60000 ? `${Math.round(ms / 1000)}s` : `${Math.floor(ms / 60000)}m${Math.round((ms % 60000) / 1000).toString().padStart(2, '0')}s`;
+    let text;
+    if (!this.busy) text = 'idle · nothing running';
+    else if (!this.turn.initSeen) text = `${ago(now - this.turn.startedAt)} · loading the session, no tool call yet (cold resume)`;
+    else if (!this.turn.last) text = `${ago(now - this.turn.startedAt)} · thinking, no tool call yet`;
+    else {
+      const idle = now - this.turn.last.at;
+      text = `${ago(now - this.turn.startedAt)} · ${this.turn.toolCount} tool${this.turn.toolCount === 1 ? '' : 's'} · last ${this.turn.last.name.split('__').pop()} ${ago(idle)} ago` + (idle > 180000 ? ' · looks stuck, try Stop' : '');
+    }
+    this.send({ type: 'poke_reply', text });
+    log('info', 'poke', { text });
   }
 
   async interrupt() {
@@ -330,6 +351,9 @@ wss.on('connection', ws => {
         if (cmd) session.userMessage({ text: `${cmd} ${msg.args || ''}`.trim(), context: msg.context });
         break;
       }
+      case 'poke':
+        if (session) session.poke();
+        break;
       case 'interrupt':
         if (session) session.interrupt();
         break;
