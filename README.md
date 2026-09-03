@@ -93,3 +93,10 @@ then close and re-run the plugin in Figma. A manifest change needs the full re-r
 node test-client.mjs "Reply with exactly: pong"
 ALLOW=0 node test-client.mjs "Use the Write tool to create /tmp/probe.txt"   # exercises Deny
 ```
+
+## Credit and license
+
+`plugin/code.js`, the base of `plugin/ui.html` and `plugin/manifest.json` come from
+[figma-console-mcp](https://github.com/southleft/figma-console-mcp) by Southleft, MIT licensed
+(`LICENSE-figma-console-mcp`). The Claude pane, the relay and the patch script are additions by
+Quince Tabak, Ask Phill, also MIT.
