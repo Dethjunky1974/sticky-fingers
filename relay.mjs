@@ -111,7 +111,10 @@ class Session {
       env: { ...process.env, CLAUDE_CONFIG_DIR: CONFIG_DIR },
       settingSources: ['user', 'project'],
       includePartialMessages: true,
-      permissionMode: 'default',
+      // Bypass: the pane never prompts. Figma writes stay gated by the
+      // figma-scope-guard PreToolUse hook, which runs regardless of permission mode.
+      permissionMode: 'bypassPermissions',
+      allowDangerouslySkipPermissions: true,
       canUseTool: (toolName, input, opts) => this.canUseTool(toolName, input, opts),
       stderr: d => log('cli', d.trim()),
       ...(this.sessionId ? { resume: this.sessionId } : {}),

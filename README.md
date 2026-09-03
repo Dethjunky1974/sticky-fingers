@@ -40,8 +40,10 @@ Environment overrides: `CLAUDE_PANE_PORT` (9240), `CLAUDE_PANE_MODEL` (`claude-f
 - **Comment on selection**: same, plus the selected layers (name, type, id, size) and a
   screenshot of each (first three), saved under `attachments/` and read by Claude.
   Figma's selection is the pointer. A plugin cannot draw a crosshair on the canvas.
-- **Allow / Deny**: tool calls that need permission show up as a card. No answer in
-  5 minutes counts as Deny.
+- **Allow / Deny**: not shown since 2026-09-03. The relay runs with
+  `permissionMode: 'bypassPermissions'`, so tool calls never prompt. Figma writes are still
+  gated by the `figma-scope-guard` PreToolUse hook. The card code stays in place; set the
+  mode back to `'default'` in `relay.mjs` to get prompts again.
 - **Scope badge**: mirrors `~/CLAUDE/figma-scope.json` (critique or edit, target nodes).
 - **Session start / end**: sends `/design-session-start <file name>` or `/design-session-end`.
 
