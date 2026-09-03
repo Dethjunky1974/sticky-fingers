@@ -3,8 +3,6 @@
 <p align="center"><img src="assets/hero.png" alt="STICKY FINGERS" width="720"></p>
 
 
-The Figma Desktop Bridge plugin, renamed and extended with a Claude pane.
-
 Talk to a Claude Code session from inside Figma. The bridge plugin panel gets a **Claude**
 button under `[+]`. The pane talks to a local relay, and the relay drives a headless Claude
 Code session through the Agent SDK. One session per Figma file, resumed across days.
