@@ -1,5 +1,8 @@
 # STICKY FINGERS
 
+<p align="center"><img src="assets/hero.png" alt="STICKY FINGERS" width="720"></p>
+
+
 The Figma Desktop Bridge plugin, renamed and extended with a Claude pane.
 
 Talk to a Claude Code session from inside Figma. The bridge plugin panel gets a **Claude**
@@ -98,6 +101,10 @@ ALLOW=0 node test-client.mjs "Use the Write tool to create /tmp/probe.txt"   # e
 ```
 
 ## Credit and license
+
+Hero: the hands are sampled cell for cell from the Nokia boot screen; the words are set in
+Bangers and Michroma (both SIL Open Font License) rasterised to the same LCD grid by
+`assets/hero.py`.
 
 `plugin/code.js`, the base of `plugin/ui.html` and `plugin/manifest.json` come from
 [figma-console-mcp](https://github.com/southleft/figma-console-mcp) by Southleft, MIT licensed
